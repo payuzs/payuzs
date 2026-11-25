@@ -93,11 +93,11 @@ payuzs/
 │           ├── click.ts           # subpath export './click'
 │           └── core.ts            # subpath export './core'
 │
-├── apps/
-│   ├── example-express/           # Click prepare/complete integration in Express
-│   └── example-hono/              # Click integration in Hono / Cloudflare Workers
+├── examples/
+│   ├── express/                   # Click prepare/complete integration in Express
+│   └── hono/                      # Click integration in Hono / Cloudflare Workers
 │
-├── pnpm-workspace.yaml            # pnpm workspace config (apps/*, packages/*)
+├── pnpm-workspace.yaml            # pnpm workspace config (examples/*, packages/*)
 ├── package.json                   # Root workspace scripts (vp check, vp test, etc.)
 └── vite.config.ts                 # Vite+ toolchain config
 ```

@@ -207,7 +207,7 @@ importers:
         specifier: 'catalog:'
         version: 1.7.0(@types/node@26.6.6)(@vitest/ui@5.1.0)(typescript@7.0.2)
 
-  apps/example-express:
+  examples/express:
     dependencies:
       '@payuzs/sdk':
         specifier: workspace:*
@@ -226,7 +226,7 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  apps/example-hono:
+  examples/hono:
     dependencies:
       '@payuzs/sdk':
         specifier: workspace:*

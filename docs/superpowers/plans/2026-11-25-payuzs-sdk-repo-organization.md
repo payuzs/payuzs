@@ -84,12 +84,12 @@ payuzs/
 │       └── tests/
 │           └── exports.test.ts
 │
-├── apps/
-│   ├── example-express/
+├── examples/
+│   ├── express/
 │   │   ├── package.json
 │   │   ├── tsconfig.json
 │   │   └── src/index.ts
-│   └── example-hono/
+│   └── hono/
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── src/index.ts
