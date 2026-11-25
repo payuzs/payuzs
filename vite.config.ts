@@ -13,7 +13,12 @@ export default defineConfig({
     },
     plugins: ["typescript", "node", "import", "promise", "oxc", "unicorn", "vitest", "eslint"],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
-    rules: { "vite-plus/prefer-vite-plus-imports": "error" },
+    rules: {
+      "vite-plus/prefer-vite-plus-imports": "error",
+      "typescript/prefer-readonly-parameter-types": "off",
+      "max-lines-per-function": "off",
+      "no-inline-comments": "off",
+    },
     options: { typeAware: true, typeCheck: true },
   },
   run: {
