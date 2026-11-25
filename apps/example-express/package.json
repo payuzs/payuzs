@@ -1,0 +1,15 @@
+{
+  "name": "example-express",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@payuzs/sdk": "workspace:*",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}
