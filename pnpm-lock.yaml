@@ -183,6 +183,9 @@ settings:
 
 catalogs:
   default:
+    '@types/node':
+      specifier: ^26.6.5
+      version: 26.6.6
     typescript:
       specifier: ^7.0.2
       version: 7.0.2
@@ -203,6 +206,44 @@ importers:
       vite-plus:
         specifier: 'catalog:'
         version: 1.7.0(@types/node@26.6.6)(@vitest/ui@5.1.0)(typescript@7.0.2)
+
+  packages/click:
+    dependencies:
+      '@payuzs/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/core:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/sdk:
+    dependencies:
+      '@payuzs/click':
+        specifier: workspace:*
+        version: link:../click
+      '@payuzs/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
 packages:
 
@@ -1458,7 +1499,6 @@ snapshots:
   '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
-    optional: true
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
@@ -1901,8 +1941,7 @@ snapshots:
       '@typescript/typescript-win32-arm64': 7.0.2
       '@typescript/typescript-win32-x64': 7.0.2
 
-  undici-types@8.9.0:
-    optional: true
+  undici-types@8.9.0: {}
 
   vite-plus@1.7.0(@types/node@26.6.6)(@vitest/ui@5.1.0)(typescript@7.0.2):
     dependencies:
