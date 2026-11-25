@@ -1,7 +1,7 @@
 import { PayuzsError } from "@payuzs/core";
 import { ClickErrorCode } from "./types.js";
 
-const CLICK_ERROR_MESSAGES: Record<ClickErrorCode, string> = {
+export const CLICK_ERROR_MESSAGES: Record<ClickErrorCode, string> = {
   [ClickErrorCode.Success]: "Success",
   [ClickErrorCode.SignCheckFailed]: "SIGN CHECK FAILED",
   [ClickErrorCode.IncorrectAmount]: "Incorrect parameter amount",
@@ -13,6 +13,10 @@ const CLICK_ERROR_MESSAGES: Record<ClickErrorCode, string> = {
   [ClickErrorCode.ErrorRequest]: "Error in request from click",
   [ClickErrorCode.TransactionCanceled]: "Transaction cancelled",
 };
+
+export function getClickErrorMessage(code: ClickErrorCode): string {
+  return CLICK_ERROR_MESSAGES[code] ?? `Click error code ${code}`;
+}
 
 export class ClickError extends PayuzsError {
   readonly code: ClickErrorCode;

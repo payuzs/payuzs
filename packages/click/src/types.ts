@@ -35,6 +35,7 @@ export interface ClickPaymentUrlOptions {
 export interface ClickCheckTransactionParams {
   paymentId?: number;
   merchantTransId?: string;
+  paymentDate?: string;
 }
 
 export interface ClickCheckTransactionResponse {
@@ -76,4 +77,42 @@ export interface ClickWebhookResponse {
   merchant_confirm_id?: number | string;
   error: ClickErrorCode;
   error_note: string;
+}
+
+export interface ClickPrepareContext {
+  clickTransId: number;
+  serviceId: string;
+  merchantTransId: string;
+  amount: number;
+  signTime: string;
+  rawPayload: ClickWebhookPayload;
+}
+
+export interface ClickCompleteContext {
+  clickTransId: number;
+  serviceId: string;
+  merchantTransId: string;
+  merchantPrepareId?: string;
+  amount: number;
+  signTime: string;
+  error?: number;
+  errorNote?: string;
+  rawPayload: ClickWebhookPayload;
+}
+
+export interface ClickPrepareResult {
+  merchantPrepareId: string;
+}
+
+export interface ClickCompleteResult {
+  merchantConfirmId: string;
+}
+
+export interface ClickWebhookConfig {
+  serviceId: string;
+  merchantId: string;
+  secretKey: string;
+  onPrepare?: (ctx: ClickPrepareContext) => Promise<ClickPrepareResult | ClickErrorCode>;
+  onComplete?: (ctx: ClickCompleteContext) => Promise<ClickCompleteResult | ClickErrorCode>;
+  onCancel?: (ctx: ClickCompleteContext) => Promise<ClickCompleteResult | ClickErrorCode | void>;
 }

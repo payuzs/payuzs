@@ -59,16 +59,15 @@ export class PayuzsHttpClient {
       throw new PayuzsApiError(`Network request failed: ${message}`, 0, err);
     }
 
-    let responseData: unknown;
-    const contentType = response.headers.get("content-type") ?? "";
+    const rawText = await response.text();
+    let responseData: unknown = rawText;
+    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
     if (contentType.includes("application/json")) {
       try {
-        responseData = await response.json();
+        responseData = JSON.parse(rawText);
       } catch {
-        responseData = await response.text();
+        responseData = rawText;
       }
-    } else {
-      responseData = await response.text();
     }
 
     if (!response.ok) {

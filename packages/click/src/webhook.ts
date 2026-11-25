@@ -1,46 +1,16 @@
 import { md5, type WebhookHandler } from "@payuzs/core";
-import { ClickError } from "./errors.js";
+import { ClickError, getClickErrorMessage } from "./errors.js";
 import {
   ClickAction,
   ClickErrorCode,
+  type ClickCompleteContext,
+  type ClickCompleteResult,
+  type ClickPrepareContext,
+  type ClickPrepareResult,
+  type ClickWebhookConfig,
   type ClickWebhookPayload,
   type ClickWebhookResponse,
 } from "./types.js";
-
-export interface ClickPrepareContext {
-  clickTransId: number;
-  serviceId: string;
-  merchantTransId: string;
-  amount: number;
-  signTime: string;
-  rawPayload: ClickWebhookPayload;
-}
-
-export interface ClickCompleteContext {
-  clickTransId: number;
-  serviceId: string;
-  merchantTransId: string;
-  merchantPrepareId?: string;
-  amount: number;
-  signTime: string;
-  rawPayload: ClickWebhookPayload;
-}
-
-export interface ClickPrepareResult {
-  merchantPrepareId: string;
-}
-
-export interface ClickCompleteResult {
-  merchantConfirmId: string;
-}
-
-export interface ClickWebhookConfig {
-  serviceId: string;
-  merchantId: string;
-  secretKey: string;
-  onPrepare?: (ctx: ClickPrepareContext) => Promise<ClickPrepareResult | ClickErrorCode>;
-  onComplete?: (ctx: ClickCompleteContext) => Promise<ClickCompleteResult | ClickErrorCode>;
-}
 
 export class ClickWebhookHandler implements WebhookHandler<
   ClickWebhookPayload,
@@ -55,6 +25,9 @@ export class ClickWebhookHandler implements WebhookHandler<
   private readonly onComplete?: (
     ctx: ClickCompleteContext,
   ) => Promise<ClickCompleteResult | ClickErrorCode>;
+  private readonly onCancel?: (
+    ctx: ClickCompleteContext,
+  ) => Promise<ClickCompleteResult | ClickErrorCode | void>;
 
   constructor(config: ClickWebhookConfig) {
     this.serviceId = config.serviceId;
@@ -62,6 +35,7 @@ export class ClickWebhookHandler implements WebhookHandler<
     this.secretKey = config.secretKey;
     this.onPrepare = config.onPrepare;
     this.onComplete = config.onComplete;
+    this.onCancel = config.onCancel;
   }
 
   verifySignature(payload: ClickWebhookPayload): boolean {
@@ -77,9 +51,28 @@ export class ClickWebhookHandler implements WebhookHandler<
     request: ClickWebhookPayload | Request | string,
   ): Promise<ClickWebhookPayload> {
     if (typeof request === "string") {
-      return JSON.parse(request) as ClickWebhookPayload;
+      try {
+        return JSON.parse(request) as ClickWebhookPayload;
+      } catch {
+        const params = new URLSearchParams(request);
+        const result: Record<string, string> = {};
+        for (const [key, value] of params.entries()) {
+          result[key] = value;
+        }
+        return result as unknown as ClickWebhookPayload;
+      }
     }
     if (typeof Request !== "undefined" && request instanceof Request) {
+      const contentType = (request.headers.get("content-type") ?? "").toLowerCase();
+      if (contentType.includes("application/x-www-form-urlencoded")) {
+        const text = await request.text();
+        const params = new URLSearchParams(text);
+        const result: Record<string, string> = {};
+        for (const [key, value] of params.entries()) {
+          result[key] = value;
+        }
+        return result as unknown as ClickWebhookPayload;
+      }
       return (await request.json()) as ClickWebhookPayload;
     }
     return request as ClickWebhookPayload;
@@ -88,10 +81,50 @@ export class ClickWebhookHandler implements WebhookHandler<
   async handleRequest(
     request: ClickWebhookPayload | Request | string,
   ): Promise<ClickWebhookResponse> {
-    const payload = await this.parsePayload(request);
+    let payload: ClickWebhookPayload;
+    try {
+      payload = await this.parsePayload(request);
+    } catch {
+      return {
+        click_trans_id: 0,
+        merchant_trans_id: "",
+        error: ClickErrorCode.ErrorRequest,
+        error_note: "Invalid request payload",
+      };
+    }
+
+    // Validate required fields
+    if (
+      typeof payload !== "object" ||
+      payload === null ||
+      payload.click_trans_id === undefined ||
+      payload.service_id === undefined ||
+      payload.merchant_trans_id === undefined ||
+      payload.amount === undefined ||
+      payload.action === undefined ||
+      payload.sign_string === undefined
+    ) {
+      return {
+        click_trans_id: Number(payload?.click_trans_id ?? 0),
+        merchant_trans_id: String(payload?.merchant_trans_id ?? ""),
+        error: ClickErrorCode.ErrorRequest,
+        error_note: "Missing required click parameters",
+      };
+    }
+
     const clickTransId = Number(payload.click_trans_id);
     const merchantTransId = String(payload.merchant_trans_id);
     const action = Number(payload.action);
+
+    // Validate service_id matches configuration
+    if (String(payload.service_id) !== String(this.serviceId)) {
+      return {
+        click_trans_id: clickTransId,
+        merchant_trans_id: merchantTransId,
+        error: ClickErrorCode.SignCheckFailed,
+        error_note: "Service ID mismatch",
+      };
+    }
 
     // 1. Signature verification
     if (!this.verifySignature(payload)) {
@@ -103,13 +136,33 @@ export class ClickWebhookHandler implements WebhookHandler<
       };
     }
 
-    // 2. Click incoming error check
+    // 2. Click incoming error/cancellation check
     if (Number(payload.error) < 0) {
+      if (action === ClickAction.Complete && this.onCancel) {
+        try {
+          await this.onCancel({
+            clickTransId,
+            serviceId: String(payload.service_id),
+            merchantTransId,
+            merchantPrepareId:
+              payload.merchant_prepare_id === undefined
+                ? undefined
+                : String(payload.merchant_prepare_id),
+            amount: Number(payload.amount),
+            signTime: String(payload.sign_time),
+            error: Number(payload.error),
+            errorNote: payload.error_note,
+            rawPayload: payload,
+          });
+        } catch {
+          // Keep response clean
+        }
+      }
       return {
         click_trans_id: clickTransId,
         merchant_trans_id: merchantTransId,
-        error: Number(payload.error) as ClickErrorCode,
-        error_note: payload.error_note ?? "Error from click",
+        error: ClickErrorCode.TransactionCanceled,
+        error_note: payload.error_note ?? "Transaction cancelled",
       };
     }
 
@@ -139,7 +192,7 @@ export class ClickWebhookHandler implements WebhookHandler<
             click_trans_id: clickTransId,
             merchant_trans_id: merchantTransId,
             error: result,
-            error_note: "Prepare rejected",
+            error_note: getClickErrorMessage(result),
           };
         }
 
@@ -181,7 +234,7 @@ export class ClickWebhookHandler implements WebhookHandler<
             merchant_trans_id: merchantTransId,
             merchant_prepare_id: payload.merchant_prepare_id,
             error: result,
-            error_note: "Complete rejected",
+            error_note: getClickErrorMessage(result),
           };
         }
 

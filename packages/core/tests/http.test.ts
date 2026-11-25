@@ -92,4 +92,31 @@ describe("PayuzsHttpClient", () => {
     const client = new PayuzsHttpClient();
     await expect(client.request("https://api.example.com/private")).rejects.toThrow(PayuzsApiError);
   });
+
+  it("handles malformed JSON response with application/json header without double-reading body", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response("<html>Bad Gateway</html>", {
+        status: 502,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const client = new PayuzsHttpClient();
+    await expect(client.request("https://api.example.com/bad")).rejects.toMatchObject({
+      name: "PayuzsApiError",
+      status: 502,
+      body: "<html>Bad Gateway</html>",
+    });
+  });
+
+  it("handles request timeout and throws PayuzsApiError", async () => {
+    vi.mocked(globalThis.fetch).mockImplementationOnce(() => {
+      const error = new Error("The operation was aborted due to timeout");
+      error.name = "TimeoutError";
+      return Promise.reject(error);
+    });
+
+    const client = new PayuzsHttpClient({ timeoutMs: 50 });
+    await expect(client.request("https://api.example.com/timeout")).rejects.toThrow(PayuzsApiError);
+  });
 });

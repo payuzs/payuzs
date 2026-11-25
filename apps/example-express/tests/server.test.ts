@@ -55,4 +55,31 @@ describe("Express Click Webhook Integration", () => {
     expect(data.error).toBe(0);
     expect(data.merchant_prepare_id).toBe("prep_order_exp");
   });
+
+  it("handles Complete (Action 1) request from Click", async () => {
+    const signTime = "2026-11-25 12:01:00";
+    const raw = `1001${serviceId}${secretKey}order_exp_2prep_exp_2500001${signTime}`;
+    const signString = md5(raw);
+
+    const res = await globalThis.fetch(`${baseUrl}/api/click/webhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        click_trans_id: 1001,
+        service_id: serviceId,
+        merchant_trans_id: "order_exp_2",
+        merchant_prepare_id: "prep_exp_2",
+        amount: "50000",
+        action: 1,
+        error: 0,
+        sign_time: signTime,
+        sign_string: signString,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { error: number; merchant_confirm_id?: string };
+    expect(data.error).toBe(0);
+    expect(data.merchant_confirm_id).toBe("conf_order_exp_2");
+  });
 });

@@ -1,4 +1,4 @@
-import { PayuzsHttpClient, sha1 } from "@payuzs/core";
+import { PayuzsError, PayuzsHttpClient, sha1 } from "@payuzs/core";
 import type {
   ClickCheckTransactionParams,
   ClickCheckTransactionResponse,
@@ -63,11 +63,21 @@ export class ClickClient {
   async checkTransaction(
     params: ClickCheckTransactionParams,
   ): Promise<ClickCheckTransactionResponse> {
+    if (
+      params.paymentId === undefined &&
+      (params.merchantTransId === undefined || params.merchantTransId === "")
+    ) {
+      throw new PayuzsError("Either paymentId or merchantTransId must be provided");
+    }
+
     const headers = await this.getAuthHeaders();
-    const path =
-      params.paymentId === undefined
-        ? `/payment/status_by_m_id/${this.serviceId}/${params.merchantTransId ?? ""}`
-        : `/payment/status/${this.serviceId}/${params.paymentId}`;
+    let path: string;
+    if (params.paymentId === undefined) {
+      const date = params.paymentDate ?? new Date().toISOString().slice(0, 10);
+      path = `/payment/status_by_mti/${encodeURIComponent(this.serviceId)}/${encodeURIComponent(params.merchantTransId ?? "")}/${encodeURIComponent(date)}`;
+    } else {
+      path = `/payment/status/${encodeURIComponent(this.serviceId)}/${encodeURIComponent(params.paymentId)}`;
+    }
 
     return this.http.request<ClickCheckTransactionResponse>(path, {
       method: "GET",

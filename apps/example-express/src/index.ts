@@ -10,6 +10,7 @@ export interface CreateExpressAppOptions {
 export function createExpressApp(options?: CreateExpressAppOptions): Express {
   const app = express();
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
   const clickHandler = new ClickWebhookHandler({
     serviceId: options?.serviceId ?? "12345",

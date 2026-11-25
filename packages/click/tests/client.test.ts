@@ -80,6 +80,34 @@ describe("ClickClient", () => {
       );
     });
 
+    it("uses status_by_mti endpoint when querying by merchantTransId", async () => {
+      const client = new ClickClient(config);
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 0, error_note: "Success" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+      const result = await client.checkTransaction({
+        merchantTransId: "order_xyz/1",
+        paymentDate: "2026-11-25",
+      });
+
+      expect(result.error).toBe(0);
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/payment/status_by_mti/12345/order_xyz%2F1/2026-11-25"),
+        expect.anything(),
+      );
+    });
+
+    it("throws PayuzsError when neither paymentId nor merchantTransId is provided", async () => {
+      const client = new ClickClient(config);
+      await expect(client.checkTransaction({})).rejects.toThrow(
+        "Either paymentId or merchantTransId must be provided",
+      );
+    });
+
     it("handles refundTransaction endpoint with POST", async () => {
       const client = new ClickClient(config);
       const mockRefundResponse = {
