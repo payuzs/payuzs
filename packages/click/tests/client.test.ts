@@ -47,6 +47,38 @@ describe("ClickClient", () => {
       expect(url.startsWith("clickuz://services/pay?")).toBe(true);
       expect(url).toContain("amount=25000.5");
     });
+
+    it("includes communal_param and additionalParams in generated payment url", () => {
+      const client = new ClickClient(config);
+      const url = client.generatePaymentUrl({
+        amount: 15000,
+        transactionParam: "order_1",
+        communalParam: "comm_99",
+        additionalParams: { promo: "test", lang: "uz" },
+      });
+      const parsed = new URL(url);
+      expect(parsed.searchParams.get("communal_param")).toBe("comm_99");
+      expect(parsed.searchParams.get("promo")).toBe("test");
+      expect(parsed.searchParams.get("lang")).toBe("uz");
+    });
+
+    it("parses return url parameters safely", () => {
+      const client = new ClickClient(config);
+      const result = client.parseReturnParams(
+        "https://myshop.uz/return?payment_id=98765&merchant_trans_id=order_1&status=2",
+      );
+      expect(result.paymentId).toBe(98765);
+      expect(result.merchantTransId).toBe("order_1");
+      expect(result.rawParams.status).toBe("2");
+    });
+
+    it("handles malformed or empty return params gracefully", () => {
+      const client = new ClickClient(config);
+      const result = client.parseReturnParams("");
+      expect(result.paymentId).toBeUndefined();
+      expect(result.merchantTransId).toBeUndefined();
+      expect(result.rawParams).toEqual({});
+    });
   });
 
   describe("Merchant API requests", () => {

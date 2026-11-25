@@ -6,6 +6,7 @@ import type {
   ClickPaymentUrlOptions,
   ClickRefundParams,
   ClickRefundResponse,
+  ClickReturnParams,
 } from "./types.js";
 
 const DEFAULT_CLICK_BASE_URL = "https://api.click.uz/v2/merchant";
@@ -44,7 +45,60 @@ export class ClickClient {
       params.set("return_url", options.returnUrl);
     }
 
+    if (options.communalParam !== undefined && options.communalParam !== "") {
+      params.set("communal_param", options.communalParam);
+    }
+
+    if (options.additionalParams !== undefined) {
+      for (const [key, value] of Object.entries(options.additionalParams)) {
+        if (!params.has(key)) {
+          params.set(key, String(value));
+        }
+      }
+    }
+
     return `${base}?${params.toString()}`;
+  }
+
+  parseReturnParams(input: string | URLSearchParams): ClickReturnParams {
+    let searchParams: URLSearchParams;
+    if (typeof input === "string") {
+      try {
+        if (input.includes("?")) {
+          searchParams = new URL(input).searchParams;
+        } else if (input.includes("=") || input.includes("&")) {
+          searchParams = new URLSearchParams(input);
+        } else {
+          searchParams = new URLSearchParams();
+        }
+      } catch {
+        const queryIndex = input.indexOf("?");
+        searchParams = new URLSearchParams(queryIndex === -1 ? "" : input.slice(queryIndex + 1));
+      }
+    } else {
+      searchParams = input;
+    }
+
+    const rawParams: Record<string, string> = {};
+    for (const [key, value] of searchParams.entries()) {
+      rawParams[key] = value;
+    }
+
+    const paymentIdStr = rawParams.payment_id ?? rawParams.paymentId;
+    const paymentId =
+      paymentIdStr !== undefined &&
+      !Number.isNaN(Number(paymentIdStr)) &&
+      paymentIdStr.trim() !== ""
+        ? Number(paymentIdStr)
+        : undefined;
+
+    const merchantTransId = rawParams.merchant_trans_id ?? rawParams.merchantTransId ?? undefined;
+
+    return {
+      paymentId,
+      merchantTransId,
+      rawParams,
+    };
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {

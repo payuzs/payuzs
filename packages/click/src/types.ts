@@ -30,6 +30,14 @@ export interface ClickPaymentUrlOptions {
   transactionParam: string;
   returnUrl?: string;
   appLink?: boolean;
+  communalParam?: string;
+  additionalParams?: Record<string, string | number>;
+}
+
+export interface ClickReturnParams {
+  paymentId?: number;
+  merchantTransId?: string;
+  rawParams: Record<string, string>;
 }
 
 export interface ClickCheckTransactionParams {
