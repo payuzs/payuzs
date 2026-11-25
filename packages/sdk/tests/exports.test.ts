@@ -8,6 +8,9 @@ describe("@payuzs/sdk exports", () => {
     expect(RootSdk.ClickClient).toBeDefined();
     expect(RootSdk.ClickWebhookHandler).toBeDefined();
     expect(RootSdk.ClickErrorCode).toBeDefined();
+    expect(RootSdk.verifyClickSignature).toBeDefined();
+    expect(typeof RootSdk.ClickWebhookHandler.createSuccessResponse).toBe("function");
+    expect(typeof RootSdk.ClickWebhookHandler.createErrorResponse).toBe("function");
   });
 
   it("exports core utilities from root", () => {
@@ -20,6 +23,7 @@ describe("@payuzs/sdk exports", () => {
     expect(ClickSdk.ClickClient).toBeDefined();
     expect(ClickSdk.ClickWebhookHandler).toBeDefined();
     expect(ClickSdk.ClickErrorCode).toBeDefined();
+    expect(ClickSdk.verifyClickSignature).toBeDefined();
   });
 
   it("exports only Core members from ./core entry", () => {
