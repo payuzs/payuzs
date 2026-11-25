@@ -1,5 +1,6 @@
-import { md5, type WebhookHandler } from "@payuzs/core";
+import type { WebhookHandler } from "@payuzs/core";
 import { ClickError, getClickErrorMessage } from "./errors.js";
+import { verifyClickSignature } from "./signature.js";
 import {
   ClickAction,
   ClickErrorCode,
@@ -11,6 +12,15 @@ import {
   type ClickWebhookPayload,
   type ClickWebhookResponse,
 } from "./types.js";
+
+function parseFormUrlEncoded(text: string): Record<string, string> {
+  const params = new URLSearchParams(text);
+  const result: Record<string, string> = {};
+  for (const [key, value] of params.entries()) {
+    result[key] = value;
+  }
+  return result;
+}
 
 export class ClickWebhookHandler implements WebhookHandler<
   ClickWebhookPayload,
@@ -38,13 +48,48 @@ export class ClickWebhookHandler implements WebhookHandler<
     this.onCancel = config.onCancel;
   }
 
+  static createSuccessResponse(params: {
+    clickTransId: number | string;
+    merchantTransId: string;
+    merchantPrepareId?: number | string;
+    merchantConfirmId?: number | string;
+  }): ClickWebhookResponse {
+    const res: ClickWebhookResponse = {
+      click_trans_id: params.clickTransId,
+      merchant_trans_id: params.merchantTransId,
+      error: ClickErrorCode.Success,
+      error_note: "Success",
+    };
+    if (params.merchantPrepareId !== undefined) {
+      res.merchant_prepare_id = params.merchantPrepareId;
+    }
+    if (params.merchantConfirmId !== undefined) {
+      res.merchant_confirm_id = params.merchantConfirmId;
+    }
+    return res;
+  }
+
+  static createErrorResponse(params: {
+    clickTransId: number | string;
+    merchantTransId: string;
+    error: ClickErrorCode;
+    errorNote?: string;
+    merchantPrepareId?: number | string;
+  }): ClickWebhookResponse {
+    const res: ClickWebhookResponse = {
+      click_trans_id: params.clickTransId,
+      merchant_trans_id: params.merchantTransId,
+      error: params.error,
+      error_note: params.errorNote ?? getClickErrorMessage(params.error),
+    };
+    if (params.merchantPrepareId !== undefined) {
+      res.merchant_prepare_id = params.merchantPrepareId;
+    }
+    return res;
+  }
+
   verifySignature(payload: ClickWebhookPayload): boolean {
-    const action = Number(payload.action);
-    const preparePart =
-      action === ClickAction.Complete ? String(payload.merchant_prepare_id ?? "") : "";
-    const signString = `${payload.click_trans_id}${payload.service_id}${this.secretKey}${payload.merchant_trans_id}${preparePart}${payload.amount}${payload.action}${payload.sign_time}`;
-    const calculatedHash = md5(signString);
-    return calculatedHash.toLowerCase() === String(payload.sign_string).toLowerCase();
+    return verifyClickSignature(payload, this.secretKey);
   }
 
   private async parsePayload(
@@ -54,24 +99,13 @@ export class ClickWebhookHandler implements WebhookHandler<
       try {
         return JSON.parse(request) as ClickWebhookPayload;
       } catch {
-        const params = new URLSearchParams(request);
-        const result: Record<string, string> = {};
-        for (const [key, value] of params.entries()) {
-          result[key] = value;
-        }
-        return result as unknown as ClickWebhookPayload;
+        return parseFormUrlEncoded(request) as unknown as ClickWebhookPayload;
       }
     }
     if (typeof Request !== "undefined" && request instanceof Request) {
       const contentType = (request.headers.get("content-type") ?? "").toLowerCase();
       if (contentType.includes("application/x-www-form-urlencoded")) {
-        const text = await request.text();
-        const params = new URLSearchParams(text);
-        const result: Record<string, string> = {};
-        for (const [key, value] of params.entries()) {
-          result[key] = value;
-        }
-        return result as unknown as ClickWebhookPayload;
+        return parseFormUrlEncoded(await request.text()) as unknown as ClickWebhookPayload;
       }
       return (await request.json()) as ClickWebhookPayload;
     }
@@ -85,15 +119,14 @@ export class ClickWebhookHandler implements WebhookHandler<
     try {
       payload = await this.parsePayload(request);
     } catch {
-      return {
-        click_trans_id: 0,
-        merchant_trans_id: "",
+      return ClickWebhookHandler.createErrorResponse({
+        clickTransId: 0,
+        merchantTransId: "",
         error: ClickErrorCode.ErrorRequest,
-        error_note: "Invalid request payload",
-      };
+        errorNote: "Invalid request payload",
+      });
     }
 
-    // Validate required fields
     if (
       typeof payload !== "object" ||
       payload === null ||
@@ -104,39 +137,36 @@ export class ClickWebhookHandler implements WebhookHandler<
       payload.action === undefined ||
       payload.sign_string === undefined
     ) {
-      return {
-        click_trans_id: Number(payload?.click_trans_id ?? 0),
-        merchant_trans_id: String(payload?.merchant_trans_id ?? ""),
+      return ClickWebhookHandler.createErrorResponse({
+        clickTransId: Number(payload?.click_trans_id ?? 0),
+        merchantTransId: String(payload?.merchant_trans_id ?? ""),
         error: ClickErrorCode.ErrorRequest,
-        error_note: "Missing required click parameters",
-      };
+        errorNote: "Missing required click parameters",
+      });
     }
 
     const clickTransId = Number(payload.click_trans_id);
     const merchantTransId = String(payload.merchant_trans_id);
     const action = Number(payload.action);
 
-    // Validate service_id matches configuration
     if (String(payload.service_id) !== String(this.serviceId)) {
-      return {
-        click_trans_id: clickTransId,
-        merchant_trans_id: merchantTransId,
+      return ClickWebhookHandler.createErrorResponse({
+        clickTransId,
+        merchantTransId,
         error: ClickErrorCode.SignCheckFailed,
-        error_note: "Service ID mismatch",
-      };
+        errorNote: "Service ID mismatch",
+      });
     }
 
-    // 1. Signature verification
     if (!this.verifySignature(payload)) {
-      return {
-        click_trans_id: clickTransId,
-        merchant_trans_id: merchantTransId,
+      return ClickWebhookHandler.createErrorResponse({
+        clickTransId,
+        merchantTransId,
         error: ClickErrorCode.SignCheckFailed,
-        error_note: "SIGN CHECK FAILED",
-      };
+        errorNote: "SIGN CHECK FAILED",
+      });
     }
 
-    // 2. Click incoming error/cancellation check
     if (Number(payload.error) < 0) {
       if (action === ClickAction.Complete && this.onCancel) {
         try {
@@ -158,24 +188,23 @@ export class ClickWebhookHandler implements WebhookHandler<
           // Keep response clean
         }
       }
-      return {
-        click_trans_id: clickTransId,
-        merchant_trans_id: merchantTransId,
+      return ClickWebhookHandler.createErrorResponse({
+        clickTransId,
+        merchantTransId,
         error: ClickErrorCode.TransactionCanceled,
-        error_note: payload.error_note ?? "Transaction cancelled",
-      };
+        errorNote: payload.error_note ?? "Transaction cancelled",
+      });
     }
 
-    // 3. Action Dispatcher
     try {
       if (action === ClickAction.Prepare) {
         if (!this.onPrepare) {
-          return {
-            click_trans_id: clickTransId,
-            merchant_trans_id: merchantTransId,
+          return ClickWebhookHandler.createErrorResponse({
+            clickTransId,
+            merchantTransId,
             error: ClickErrorCode.ActionNotFound,
-            error_note: "Action not found",
-          };
+            errorNote: "Action not found",
+          });
         }
 
         const result = await this.onPrepare({
@@ -188,31 +217,28 @@ export class ClickWebhookHandler implements WebhookHandler<
         });
 
         if (typeof result === "number") {
-          return {
-            click_trans_id: clickTransId,
-            merchant_trans_id: merchantTransId,
+          return ClickWebhookHandler.createErrorResponse({
+            clickTransId,
+            merchantTransId,
             error: result,
-            error_note: getClickErrorMessage(result),
-          };
+          });
         }
 
-        return {
-          click_trans_id: clickTransId,
-          merchant_trans_id: merchantTransId,
-          merchant_prepare_id: result.merchantPrepareId,
-          error: ClickErrorCode.Success,
-          error_note: "Success",
-        };
+        return ClickWebhookHandler.createSuccessResponse({
+          clickTransId,
+          merchantTransId,
+          merchantPrepareId: result.merchantPrepareId,
+        });
       }
 
       if (action === ClickAction.Complete) {
         if (!this.onComplete) {
-          return {
-            click_trans_id: clickTransId,
-            merchant_trans_id: merchantTransId,
+          return ClickWebhookHandler.createErrorResponse({
+            clickTransId,
+            merchantTransId,
             error: ClickErrorCode.ActionNotFound,
-            error_note: "Action not found",
-          };
+            errorNote: "Action not found",
+          });
         }
 
         const result = await this.onComplete({
@@ -229,46 +255,43 @@ export class ClickWebhookHandler implements WebhookHandler<
         });
 
         if (typeof result === "number") {
-          return {
-            click_trans_id: clickTransId,
-            merchant_trans_id: merchantTransId,
-            merchant_prepare_id: payload.merchant_prepare_id,
+          return ClickWebhookHandler.createErrorResponse({
+            clickTransId,
+            merchantTransId,
+            merchantPrepareId: payload.merchant_prepare_id,
             error: result,
-            error_note: getClickErrorMessage(result),
-          };
+          });
         }
 
-        return {
-          click_trans_id: clickTransId,
-          merchant_trans_id: merchantTransId,
-          merchant_prepare_id: payload.merchant_prepare_id,
-          merchant_confirm_id: result.merchantConfirmId,
-          error: ClickErrorCode.Success,
-          error_note: "Success",
-        };
+        return ClickWebhookHandler.createSuccessResponse({
+          clickTransId,
+          merchantTransId,
+          merchantPrepareId: payload.merchant_prepare_id,
+          merchantConfirmId: result.merchantConfirmId,
+        });
       }
 
-      return {
-        click_trans_id: clickTransId,
-        merchant_trans_id: merchantTransId,
+      return ClickWebhookHandler.createErrorResponse({
+        clickTransId,
+        merchantTransId,
         error: ClickErrorCode.ActionNotFound,
-        error_note: `Unknown action: ${action}`,
-      };
+        errorNote: `Unknown action: ${action}`,
+      });
     } catch (err: unknown) {
       if (err instanceof ClickError) {
-        return {
-          click_trans_id: clickTransId,
-          merchant_trans_id: merchantTransId,
+        return ClickWebhookHandler.createErrorResponse({
+          clickTransId,
+          merchantTransId,
           error: err.code,
-          error_note: err.errorNote,
-        };
+          errorNote: err.errorNote,
+        });
       }
-      return {
-        click_trans_id: clickTransId,
-        merchant_trans_id: merchantTransId,
+      return ClickWebhookHandler.createErrorResponse({
+        clickTransId,
+        merchantTransId,
         error: ClickErrorCode.ErrorUpdate,
-        error_note: err instanceof Error ? err.message : "Internal error",
-      };
+        errorNote: err instanceof Error ? err.message : "Internal error",
+      });
     }
   }
 }
