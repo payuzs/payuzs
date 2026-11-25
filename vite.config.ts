@@ -16,6 +16,7 @@ export default defineConfig({
     rules: {
       "vite-plus/prefer-vite-plus-imports": "error",
       "typescript/prefer-readonly-parameter-types": "off",
+      "typescript/no-unsafe-assignment": "off",
       "max-lines-per-function": "off",
       "no-inline-comments": "off",
     },
