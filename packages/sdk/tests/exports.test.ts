@@ -11,6 +11,15 @@ describe("@payuzs/sdk exports", () => {
     expect(RootSdk.verifyClickSignature).toBeDefined();
     expect(typeof RootSdk.ClickWebhookHandler.createSuccessResponse).toBe("function");
     expect(typeof RootSdk.ClickWebhookHandler.createErrorResponse).toBe("function");
+
+    const client = new RootSdk.ClickClient({
+      serviceId: "1",
+      merchantId: "2",
+      secretKey: "3",
+    });
+    expect(typeof client.parseReturnParams).toBe("function");
+    const parsed = client.parseReturnParams("?payment_id=456");
+    expect(parsed.paymentId).toBe(456);
   });
 
   it("exports core utilities from root", () => {

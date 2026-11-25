@@ -12,6 +12,14 @@ import type {
 const DEFAULT_CLICK_BASE_URL = "https://api.click.uz/v2/merchant";
 const CLICK_WEB_CHECKOUT_URL = "https://my.click.uz/services/pay";
 const CLICK_APP_CHECKOUT_URL = "clickuz://services/pay";
+const RESERVED_URL_KEYS = new Set([
+  "service_id",
+  "merchant_id",
+  "amount",
+  "transaction_param",
+  "return_url",
+  "communal_param",
+]);
 
 export class ClickClient {
   readonly serviceId: string;
@@ -51,7 +59,7 @@ export class ClickClient {
 
     if (options.additionalParams !== undefined) {
       for (const [key, value] of Object.entries(options.additionalParams)) {
-        if (!params.has(key)) {
+        if (!RESERVED_URL_KEYS.has(key) && !params.has(key)) {
           params.set(key, String(value));
         }
       }
@@ -61,19 +69,35 @@ export class ClickClient {
   }
 
   parseReturnParams(input: string | URLSearchParams): ClickReturnParams {
+    if (
+      input === null ||
+      input === undefined ||
+      (typeof input !== "string" && !(input instanceof URLSearchParams))
+    ) {
+      return {
+        paymentId: undefined,
+        merchantTransId: undefined,
+        rawParams: {},
+      };
+    }
+
     let searchParams: URLSearchParams;
     if (typeof input === "string") {
       try {
-        if (input.includes("?")) {
-          searchParams = new URL(input).searchParams;
-        } else if (input.includes("=") || input.includes("&")) {
-          searchParams = new URLSearchParams(input);
+        const withoutFragment = input.split("#")[0] ?? "";
+        if (withoutFragment.includes("?")) {
+          searchParams = new URL(withoutFragment, "https://dummy.local").searchParams;
+        } else if (withoutFragment.includes("=") || withoutFragment.includes("&")) {
+          searchParams = new URLSearchParams(withoutFragment);
         } else {
           searchParams = new URLSearchParams();
         }
       } catch {
-        const queryIndex = input.indexOf("?");
-        searchParams = new URLSearchParams(queryIndex === -1 ? "" : input.slice(queryIndex + 1));
+        const withoutFragment = input.split("#")[0] ?? "";
+        const queryIndex = withoutFragment.indexOf("?");
+        searchParams = new URLSearchParams(
+          queryIndex === -1 ? "" : withoutFragment.slice(queryIndex + 1),
+        );
       }
     } else {
       searchParams = input;
@@ -85,14 +109,18 @@ export class ClickClient {
     }
 
     const paymentIdStr = rawParams.payment_id ?? rawParams.paymentId;
+    const numPaymentId = Number(paymentIdStr);
     const paymentId =
-      paymentIdStr !== undefined &&
-      !Number.isNaN(Number(paymentIdStr)) &&
-      paymentIdStr.trim() !== ""
-        ? Number(paymentIdStr)
+      paymentIdStr !== undefined && paymentIdStr.trim() !== "" && Number.isFinite(numPaymentId)
+        ? numPaymentId
         : undefined;
 
-    const merchantTransId = rawParams.merchant_trans_id ?? rawParams.merchantTransId ?? undefined;
+    const rawMerchantTransId =
+      rawParams.merchant_trans_id ?? rawParams.merchantTransId ?? undefined;
+    const merchantTransId =
+      rawMerchantTransId !== undefined && rawMerchantTransId.trim() !== ""
+        ? rawMerchantTransId
+        : undefined;
 
     return {
       paymentId,

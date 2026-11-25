@@ -62,6 +62,35 @@ describe("ClickClient", () => {
       expect(parsed.searchParams.get("lang")).toBe("uz");
     });
 
+    it("prevents additionalParams from overriding reserved parameters", () => {
+      const client = new ClickClient(config);
+      const url = client.generatePaymentUrl({
+        amount: 15000,
+        transactionParam: "order_1",
+        returnUrl: "https://myshop.uz/return",
+        communalParam: "comm_1",
+        additionalParams: {
+          service_id: "hacked",
+          merchant_id: "hacked",
+          amount: 999999,
+          transaction_param: "hacked",
+          return_url: "hacked",
+          communal_param: "hacked",
+          custom_ref: "safe_val",
+        },
+      });
+      const parsed = new URL(url);
+      expect(parsed.searchParams.get("service_id")).toBe("12345");
+      expect(parsed.searchParams.get("merchant_id")).toBe("67890");
+      expect(parsed.searchParams.get("amount")).toBe("15000");
+      expect(parsed.searchParams.get("transaction_param")).toBe("order_1");
+      expect(parsed.searchParams.get("return_url")).toBe("https://myshop.uz/return");
+      expect(parsed.searchParams.get("communal_param")).toBe("comm_1");
+      expect(parsed.searchParams.get("custom_ref")).toBe("safe_val");
+    });
+  });
+
+  describe("parseReturnParams", () => {
     it("parses return url parameters safely", () => {
       const client = new ClickClient(config);
       const result = client.parseReturnParams(
@@ -70,6 +99,40 @@ describe("ClickClient", () => {
       expect(result.paymentId).toBe(98765);
       expect(result.merchantTransId).toBe("order_1");
       expect(result.rawParams.status).toBe("2");
+    });
+
+    it("strips fragments on full, relative and bare query strings", () => {
+      const client = new ClickClient(config);
+      const res1 = client.parseReturnParams("/return?payment_id=98765#done");
+      expect(res1.paymentId).toBe(98765);
+      expect(res1.rawParams.payment_id).toBe("98765");
+
+      const res2 = client.parseReturnParams("payment_id=98765#fragment");
+      expect(res2.paymentId).toBe(98765);
+      expect(res2.rawParams.payment_id).toBe("98765");
+    });
+
+    it("rejects Infinity as paymentId and handles null/undefined gracefully", () => {
+      const client = new ClickClient(config);
+      const res1 = client.parseReturnParams("?payment_id=Infinity");
+      expect(res1.paymentId).toBeUndefined();
+
+      // @ts-expect-error testing runtime safety
+      const res2 = client.parseReturnParams(null);
+      expect(res2.paymentId).toBeUndefined();
+      expect(res2.rawParams).toEqual({});
+
+      const res3 = client.parseReturnParams(null as unknown as string);
+      expect(res3.paymentId).toBeUndefined();
+      expect(res3.rawParams).toEqual({});
+    });
+
+    it("accepts URLSearchParams instance and normalizes empty merchant_trans_id", () => {
+      const client = new ClickClient(config);
+      const searchParams = new URLSearchParams("payment_id=123&merchant_trans_id=");
+      const res = client.parseReturnParams(searchParams);
+      expect(res.paymentId).toBe(123);
+      expect(res.merchantTransId).toBeUndefined();
     });
 
     it("handles malformed or empty return params gracefully", () => {

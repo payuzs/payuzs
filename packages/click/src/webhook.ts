@@ -133,7 +133,9 @@ export class ClickWebhookHandler implements WebhookHandler<
       payload.click_trans_id === undefined ||
       payload.service_id === undefined ||
       payload.merchant_trans_id === undefined ||
+      payload.amount === null ||
       payload.amount === undefined ||
+      String(payload.amount).trim() === "" ||
       payload.action === undefined ||
       payload.sign_string === undefined
     ) {

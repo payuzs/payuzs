@@ -2,12 +2,24 @@ import { md5 } from "@payuzs/core";
 import { ClickAction, type ClickWebhookPayload } from "./types.js";
 
 export function verifyClickSignature(payload: ClickWebhookPayload, secretKey: string): boolean {
+  if (
+    payload === null ||
+    payload === undefined ||
+    typeof payload !== "object" ||
+    typeof payload.sign_string !== "string" ||
+    payload.sign_string.trim() === "" ||
+    payload.amount === null ||
+    payload.amount === undefined ||
+    String(payload.amount).trim() === ""
+  ) {
+    return false;
+  }
+
   const action = Number(payload.action);
   const preparePart =
     action === ClickAction.Complete ? String(payload.merchant_prepare_id ?? "") : "";
-  const expectedHash = String(payload.sign_string).toLowerCase();
+  const expectedHash = payload.sign_string.trim().toLowerCase();
 
-  // 1. Check with raw string amount
   const rawAmount = String(payload.amount);
   const sign = (amt: string) =>
     md5(
@@ -18,23 +30,15 @@ export function verifyClickSignature(payload: ClickWebhookPayload, secretKey: st
     return true;
   }
 
-  // 2. If mismatch and amount is numeric, check with 2 decimal places (e.g. 1000 -> 1000.00)
   const num = Number(payload.amount);
-  if (!Number.isNaN(num)) {
+  if (Number.isFinite(num)) {
     const fixed = num.toFixed(2);
     if (fixed !== rawAmount && sign(fixed) === expectedHash) {
       return true;
     }
-    if (rawAmount.includes(".")) {
-      const intStr = String(Math.floor(num));
-      if (
-        intStr !== rawAmount &&
-        intStr !== fixed &&
-        num === Math.floor(num) &&
-        sign(intStr) === expectedHash
-      ) {
-        return true;
-      }
+    const unpadded = String(num);
+    if (unpadded !== rawAmount && unpadded !== fixed && sign(unpadded) === expectedHash) {
+      return true;
     }
   }
 
